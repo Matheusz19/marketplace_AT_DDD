@@ -43,11 +43,16 @@ public class Contrato {
     public void registrarEntrega() {
         if (status != StatusContrato.ATIVO) throw new IllegalStateException("Somente contratos ativos recebem entrega");
         status = StatusContrato.ENTREGA_REGISTRADA;
+
+        this.domainEvents.add(br.com.freela.contrato.domain.event.EntregaRegistrada.novo(this));
     }
     public void concluir() {
         if (status != StatusContrato.ENTREGA_REGISTRADA) throw new IllegalStateException("A entrega precisa estar registrada");
         status = StatusContrato.CONCLUIDO;
+
+        this.domainEvents.add(br.com.freela.contrato.domain.event.ContratoConcluido.novo(this));
     }
+
     public void cancelar() {
         if (status == StatusContrato.CONCLUIDO) throw new IllegalStateException("Contrato concluído não pode ser cancelado");
         status = StatusContrato.CANCELADO;

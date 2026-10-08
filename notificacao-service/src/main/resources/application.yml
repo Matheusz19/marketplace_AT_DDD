@@ -4,7 +4,7 @@ spring:
   application:
     name: notificacao-service
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/notificacao_db}
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/notificacao_db}
     username: ${DB_USER:freela}
     password: ${DB_PASSWORD:freela}
   jpa:
@@ -13,6 +13,18 @@ spring:
     open-in-view: false
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
+
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.value.default.type: br.com.freela.notificacao.shared.EventMessage
 management:
   endpoints:
     web:
@@ -21,13 +33,19 @@ management:
   endpoint:
     health:
       show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_URL:http://localhost:9411/api/v2/spans}
 eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level service=${spring.application.name} thread=%thread logger=%logger{36} - %msg%n"
-  level:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level service=${spring.application.name} thread=[%thread] [traceId=%X{traceId:-}, spanId=%X{spanId:-}, correlationId=%X{correlationId:-}] logger=%logger{36} - %msg%n"
+    level:
     root: INFO
     br.com.freela: INFO
