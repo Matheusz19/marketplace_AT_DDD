@@ -21,7 +21,6 @@ public class AuditoriaService {
   log.info("auditoria.registro.inicio eventId={} aggregateId={} eventType={} correlationId={}",
           eventId, aggregateId, eventType, correlationId);
 
-  // TRATAMENTO DE MENSAGENS DUPLICADAS (IDEMPOTÊNCIA - Ponto 5)
   if (repository.existsById(eventId)) {
    log.warn("auditoria.evento.duplicado.ignorado eventId={}", eventId);
    return;
