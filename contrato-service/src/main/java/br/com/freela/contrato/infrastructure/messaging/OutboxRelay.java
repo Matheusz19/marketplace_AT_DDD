@@ -6,6 +6,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,17 +34,13 @@ public class OutboxRelay {
     @Transactional
     public void publishEvents() {
         List<OutboxEvent> events = repository.findByProcessedFalseOrderByCreatedAtAsc();
-        if (events.isEmpty()) {
-            return;
-        }
+        if (events.isEmpty()) return;
 
         for (OutboxEvent event : events) {
             String correlationId = event.getCorrelationId();
 
             try {
-                if (correlationId != null) {
-                    MDC.put("correlationId", correlationId);
-                }
+                if (correlationId != null) MDC.put("correlationId", correlationId);
 
                 ObjectNode envelope = objectMapper.createObjectNode();
                 envelope.put("eventId", event.getId().toString());
@@ -53,21 +52,31 @@ public class OutboxRelay {
 
                 String jsonMessage = objectMapper.writeValueAsString(envelope);
 
-                kafkaTemplate.send("contrato.lifecycle.events", event.getAggregateId().toString(), jsonMessage)
-                        .whenComplete((result, ex) -> {
-                            if (correlationId != null) {
-                                MDC.put("correlationId", correlationId);
-                            }
-                            try {
-                                if (ex == null) {
-                                    log.info("kafka.publish.sucesso eventId={} topic=contrato.lifecycle.events", event.getId());
-                                } else {
-                                    log.error("kafka.publish.falha eventId={}", event.getId(), ex);
-                                }
-                            } finally {
-                                MDC.remove("correlationId");
-                            }
-                        });
+                MessageBuilder<String> messageBuilder = MessageBuilder
+                        .withPayload(jsonMessage)
+                        .setHeader(KafkaHeaders.TOPIC, "contrato.lifecycle.events")
+                        .setHeader(KafkaHeaders.KEY, event.getAggregateId().toString());
+
+                if (event.getTraceId() != null && event.getSpanId() != null) {
+                    String traceparent = String.format("00-%s-%s-01", event.getTraceId(), event.getSpanId());
+                    messageBuilder.setHeader("traceparent", traceparent);
+                    MDC.put("traceId", event.getTraceId());
+                }
+
+                Message<String> message = messageBuilder.build();
+
+                kafkaTemplate.send(message).whenComplete((result, ex) -> {
+                    if (correlationId != null) MDC.put("correlationId", correlationId);
+                    try {
+                        if (ex == null) {
+                            log.info("kafka.publish.sucesso eventId={} topic=contrato.lifecycle.events", event.getId());
+                        } else {
+                            log.error("kafka.publish.falha eventId={}", event.getId(), ex);
+                        }
+                    } finally {
+                        MDC.remove("correlationId");
+                    }
+                });
 
                 event.markAsProcessed();
                 repository.save(event);
@@ -76,6 +85,7 @@ public class OutboxRelay {
                 log.error("Erro ao processar envio do evento outbox eventId={}", event.getId(), e);
             } finally {
                 MDC.remove("correlationId");
+                MDC.remove("traceId");
             }
         }
     }

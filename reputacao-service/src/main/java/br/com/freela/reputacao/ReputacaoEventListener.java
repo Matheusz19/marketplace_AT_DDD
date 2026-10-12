@@ -52,7 +52,7 @@ public class ReputacaoEventListener {
             log.error("reputacao.processamento.falha eventId={}", message.eventId(), e);
             throw e;
         } finally {
-            MDC.clear();
+            MDC.remove("correlationId");
         }
     }
 }

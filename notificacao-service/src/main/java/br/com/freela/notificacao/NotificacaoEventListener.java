@@ -57,7 +57,7 @@ public class NotificacaoEventListener {
             log.error("notificacao.processamento.falha eventId={} contratoId={}", message.eventId(), message.aggregateId(), e);
             throw e;
         } finally {
-            MDC.clear();
+            MDC.remove("correlationId");
         }
     }
 }

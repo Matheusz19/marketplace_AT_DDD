@@ -36,7 +36,7 @@ public class AuditoriaEventListener {
             log.error("auditoria.processamento.falha eventId={}", message.eventId(), e);
             throw e;
         } finally {
-            MDC.clear();
+            MDC.remove("correlationId");
         }
     }
 }

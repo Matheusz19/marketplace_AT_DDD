@@ -7,6 +7,8 @@ import br.com.freela.contrato.infrastructure.config.CorrelationIdContext;
 import br.com.freela.contrato.infrastructure.messaging.OutboxEvent;
 import br.com.freela.contrato.infrastructure.messaging.OutboxRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.tracing.Tracer;
+import org.springframework.beans.factory.ObjectProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -21,11 +23,13 @@ public class ContratoApplicationService {
     private final ContratoRepository repository;
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
+    private final ObjectProvider<Tracer> tracerProvider;
 
-    public ContratoApplicationService(ContratoRepository repository, OutboxRepository outboxRepository, ObjectMapper objectMapper) {
+    public ContratoApplicationService(ContratoRepository repository, OutboxRepository outboxRepository, ObjectMapper objectMapper, ObjectProvider<Tracer> tracerProvider) {
         this.repository = repository;
         this.outboxRepository = outboxRepository;
         this.objectMapper = objectMapper;
+        this.tracerProvider = tracerProvider;
     }
 
     @Transactional
@@ -88,11 +92,24 @@ public class ContratoApplicationService {
 
     private void salvarEventosOutbox(Contrato contrato) {
         String correlationId = CorrelationIdContext.get();
+
+        String traceId = null;
+        String spanId = null;
+
+        Tracer tracer = tracerProvider.getIfAvailable();
+
+        if (tracer != null && tracer.currentTraceContext().context() != null) {
+            traceId = tracer.currentTraceContext().context().traceId();
+            spanId = tracer.currentTraceContext().context().spanId();
+        }
+
         for (DomainEvent event : contrato.pullDomainEvents()) {
             try {
                 String payloadJson = objectMapper.writeValueAsString(event);
+
                 OutboxEvent outboxEvent = new OutboxEvent(
-                        event.eventId(), contrato.id(), event.eventType(), payloadJson, correlationId
+                        event.eventId(), contrato.id(), event.eventType(),
+                        payloadJson, correlationId, traceId, spanId
                 );
                 outboxRepository.save(outboxEvent);
                 log.info("contrato.evento.outbox.salvo eventId={} eventType={}", event.eventId(), event.eventType());
